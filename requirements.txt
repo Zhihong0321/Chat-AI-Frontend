@@ -1,15 +1,11 @@
 # Frontend-only requirements (Gradio UI)
 # No GraphRAG dependency - avoids aiofiles conflict
 
-# Web UI - pinned to stable versions
-gradio==4.44.0
-gradio-client==1.3.0
+# Web UI - using older stable version to avoid JSON schema bug
+gradio==4.36.1
 
 # HTTP Client for API calls
 httpx>=0.27.0,<1.0.0
 
 # Environment variables
 python-dotenv>=1.0.0,<2.0.0
-
-# Fix for gradio compatibility
-huggingface_hub==0.23.5
