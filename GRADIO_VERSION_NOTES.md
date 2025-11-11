@@ -49,9 +49,16 @@
 ## Current Working requirements.txt
 ```
 gradio==4.20.0
+huggingface_hub==0.20.0  # CRITICAL: Must pin this for Gradio 4.20.0
 httpx>=0.27.0,<1.0.0
 python-dotenv>=1.0.0,<2.0.0
 ```
+
+## Critical Dependency Note
+- **huggingface_hub 0.20.0** is required because:
+  - Gradio 4.20.0 imports `HfFolder` from huggingface_hub
+  - huggingface_hub >= 0.21.0 removed the `HfFolder` class
+  - Without pinning, Railway installs latest huggingface_hub which breaks Gradio
 
 ## DO NOT:
 - ❌ Upgrade Gradio without testing locally first

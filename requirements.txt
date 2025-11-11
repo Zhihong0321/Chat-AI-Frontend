@@ -4,6 +4,9 @@
 # Web UI - stable version that works
 gradio==4.20.0
 
+# Pin huggingface_hub to version that has HfFolder (required by Gradio 4.20.0)
+huggingface_hub==0.20.0
+
 # HTTP Client for API calls
 httpx>=0.27.0,<1.0.0
 
