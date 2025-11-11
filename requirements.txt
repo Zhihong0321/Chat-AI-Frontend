@@ -1,8 +1,9 @@
 # Frontend-only requirements (Gradio UI)
 # No GraphRAG dependency - avoids aiofiles conflict
 
-# Web UI - using older stable version to avoid JSON schema bug
+# Web UI - pinned versions that work together
 gradio==4.36.1
+huggingface_hub==0.23.0
 
 # HTTP Client for API calls
 httpx>=0.27.0,<1.0.0
