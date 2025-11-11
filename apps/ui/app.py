@@ -983,8 +983,8 @@ def create_ui():
         
         # Load initial data when the app starts
         app.load(
-            get_folder_choices_for_agents,
-            outputs=[agent_folder_access]
+            fn=lambda: (get_folder_choices(), get_folder_choices_for_agents()),
+            outputs=[folder_selector, agent_folder_access]
         )
     
     return app
