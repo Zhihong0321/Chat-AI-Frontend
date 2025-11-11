@@ -974,17 +974,6 @@ def create_ui():
         
         gr.Markdown("---")
         gr.Markdown("💡 **Tip:** Upload documents → Index them → Create agents → Start chatting!")
-        
-        # Initialize folder choices and agent choices on load
-        app.load(
-            get_folder_choices_for_agents,
-            outputs=[agent_folder_access]
-        )
-        
-        app.load(
-            get_agent_choices_for_chat,
-            outputs=[chat_agent_selector]
-        )
     
     return app
 
