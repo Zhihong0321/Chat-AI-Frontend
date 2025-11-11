@@ -1,9 +1,8 @@
 # Frontend-only requirements (Gradio UI)
 # No GraphRAG dependency - avoids aiofiles conflict
 
-# Web UI - updated to fix JSON schema bug
-gradio==4.44.0
-gradio-client==1.3.0
+# Web UI - stable version that works
+gradio==4.20.0
 
 # HTTP Client for API calls
 httpx>=0.27.0,<1.0.0
