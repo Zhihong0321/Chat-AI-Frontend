@@ -395,8 +395,14 @@ def create_ui():
                         
                         with gr.Row():
                             agent_llm_model = gr.Dropdown(
-                                choices=["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
-                                value="gpt-4o-mini",
+                                choices=[
+                                    "gpt-5-nano-2025-08-07",
+                                    "gpt-5-mini-2025-08-07",
+                                    "deepseek-v3-2-exp",
+                                    "qwen3-max",
+                                    "gemini-2.5-flash"
+                                ],
+                                value="gpt-5-mini-2025-08-07",
                                 label="LLM Model"
                             )
                             agent_temperature = gr.Slider(
@@ -974,6 +980,12 @@ def create_ui():
         
         gr.Markdown("---")
         gr.Markdown("💡 **Tip:** Upload documents → Index them → Create agents → Start chatting!")
+        
+        # Load initial data when the app starts
+        app.load(
+            get_folder_choices_for_agents,
+            outputs=[agent_folder_access]
+        )
     
     return app
 
