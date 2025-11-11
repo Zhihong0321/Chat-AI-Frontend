@@ -768,8 +768,7 @@ def create_ui():
                                 headers=["Folder", "Document", "Snippet"],
                                 label="Source References",
                                 interactive=False,
-                                wrap=True,
-                                column_widths=["15%", "25%", "60%"]
+                                wrap=True
                             )
                 
                 # Hidden state for session management
