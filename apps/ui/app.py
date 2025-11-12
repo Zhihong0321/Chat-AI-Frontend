@@ -18,13 +18,46 @@ ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change-me")
 print(f"🔗 Frontend connecting to API: {API_BASE}")
 print(f"🔑 Admin token configured: {'Yes' if ADMIN_TOKEN != 'change-me' else 'No (using default)'}")
 
+# Check backend health and GPT-5 availability on startup
+def verify_backend_ready():
+    """Check backend is properly configured on app startup."""
+    try:
+        response = httpx.get(f"{API_BASE}/health", timeout=5.0)
+        
+        if response.status_code != 200:
+            print("⚠️ WARNING: Backend health check failed")
+            return False
+        
+        health = response.json()
+        print(f"✅ Backend status: {health.get('status', 'unknown')}")
+        
+        # Check document processing
+        components = health.get('components', {})
+        doc_proc = components.get('document_processing', {})
+        
+        if isinstance(doc_proc, dict):
+            if doc_proc.get('gpt5_available'):
+                print("✅ GPT-5 Vision is available for document processing")
+            else:
+                print("⚠️ GPT-5 Vision not configured - using fallback methods")
+        
+        return True
+        
+    except Exception as e:
+        print(f"⚠️ WARNING: Cannot connect to backend: {e}")
+        return False
+
+# Run health check on startup
+print("🔍 Checking backend health...")
+verify_backend_ready()
+
 
 def create_ui():
     """Create Gradio interface."""
     
     with gr.Blocks(title="GraphRAG Chatbot", theme=gr.themes.Soft()) as app:
         gr.Markdown("# 🤖 GraphRAG Knowledge Chatbot")
-        gr.Markdown("Upload documents, create chat profiles, and query your knowledge base.")
+        gr.Markdown("Upload documents, create chat profiles, and query your knowledge base with GPT-5 Vision support.")
         
         with gr.Tabs():
             # Tab 1: Knowledge Vault (Folder-based document management)
@@ -53,6 +86,7 @@ def create_ui():
                 
                 gr.Markdown("---")
                 gr.Markdown("### Document Upload")
+                gr.Markdown("💡 **Tip:** PDFs and images are processed with GPT-5 Vision for enhanced text extraction")
                 
                 with gr.Row():
                     with gr.Column():
@@ -68,7 +102,17 @@ def create_ui():
                             type="filepath"
                         )
                         upload_to_folder_btn = gr.Button("Upload to Folder", variant="primary")
-                        upload_folder_status = gr.Textbox(label="Upload Status", interactive=False, lines=3)
+                        upload_folder_status = gr.Textbox(label="Upload Status", interactive=False, lines=5)
+                        
+                        # Text preview section
+                        with gr.Accordion("📄 Extracted Text Preview", open=False):
+                            upload_text_preview = gr.Textbox(
+                                label="Preview",
+                                interactive=False,
+                                lines=10,
+                                max_lines=15,
+                                placeholder="Text preview will appear here after upload..."
+                            )
                     
                     with gr.Column():
                         refresh_docs_btn = gr.Button("🔄 Refresh Document List")
@@ -149,21 +193,31 @@ def create_ui():
                 
                 def upload_to_folder(folder_id, files):
                     if not folder_id:
-                        return "❌ Please select a folder first"
+                        return "❌ Please select a folder first", ""
                     
                     if not files:
-                        return "❌ Please select files to upload"
+                        return "❌ Please select files to upload", ""
                     
                     results = []
                     success_count = 0
                     fail_count = 0
+                    text_previews = []
                     
                     file_list = files if isinstance(files, list) else [files]
                     
                     for file_path in file_list:
                         try:
+                            filename = os.path.basename(file_path)
+                            file_ext = filename.lower().split('.')[-1]
+                            
+                            # Show processing indicator based on file type
+                            if file_ext in ['pdf', 'png', 'jpg', 'jpeg']:
+                                processing_indicator = "🤖 AI Vision"
+                            else:
+                                processing_indicator = "📄 Standard"
+                            
                             with open(file_path, 'rb') as f:
-                                files_data = {'file': (os.path.basename(file_path), f)}
+                                files_data = {'file': (filename, f)}
                                 response = httpx.post(
                                     f"{API_BASE}/folders/{folder_id}/upload",
                                     files=files_data,
@@ -172,19 +226,40 @@ def create_ui():
                             
                             if response.status_code == 200:
                                 result = response.json()
-                                results.append(f"✅ {os.path.basename(file_path)}: Success")
+                                
+                                # Build success message with processing method
+                                msg = f"✅ {filename}: Success"
+                                if result.get('processing_method'):
+                                    method = result['processing_method']
+                                    if method == 'gpt5_vision':
+                                        msg += " (GPT-5 Vision)"
+                                    elif method == 'unstructured':
+                                        msg += " (Unstructured)"
+                                    else:
+                                        msg += f" ({method})"
+                                
+                                results.append(msg)
                                 success_count += 1
+                                
+                                # Collect text preview if available
+                                if result.get('extracted_text_preview'):
+                                    preview = result['extracted_text_preview']
+                                    text_previews.append(f"📄 {filename}:\n{preview}\n")
                             else:
-                                results.append(f"❌ {os.path.basename(file_path)}: {response.text[:50]}")
+                                results.append(f"❌ {filename}: {response.text[:50]}")
                                 fail_count += 1
                         except Exception as e:
-                            results.append(f"❌ {os.path.basename(file_path)}: {str(e)[:50]}")
+                            results.append(f"❌ {filename}: {str(e)[:50]}")
                             fail_count += 1
                     
                     summary = f"Upload complete: {success_count} succeeded, {fail_count} failed\n\n"
                     if success_count > 0:
                         summary += "⚠️ NEXT STEP: Scroll down and click 'Index Selected Folder' to make documents queryable!\n\n"
-                    return summary + "\n".join(results)
+                    
+                    status_msg = summary + "\n".join(results)
+                    preview_msg = "\n\n".join(text_previews) if text_previews else "No text preview available"
+                    
+                    return status_msg, preview_msg
                 
                 def list_folder_documents(folder_id):
                     if not folder_id:
@@ -293,19 +368,28 @@ def create_ui():
                 def test_api_connection():
                     """Test connection to the backend API."""
                     try:
-                        # Test folders list endpoint (should always work)
-                        response = httpx.get(f"{API_BASE}/folders/list", timeout=5.0)
+                        # Test health endpoint (no auth required)
+                        response = httpx.get(f"{API_BASE}/health", timeout=5.0)
                         if response.status_code == 200:
-                            folders = response.json()
-                            return f"✅ API Connected!\n\nEndpoint: {API_BASE}\nStatus: OK\nFolders found: {len(folders)}"
+                            health = response.json()
+                            status = health.get('status', 'unknown')
+                            timestamp = health.get('timestamp', 'N/A')
+                            
+                            status_emoji = '✅' if status == 'healthy' else '⚠️'
+                            
+                            result = f"{status_emoji} API Connected!\n\nEndpoint: {API_BASE}\nStatus: {status}\nTimestamp: {timestamp}"
+                            
+                            # Show component statuses if available
+                            components = health.get('components', {})
+                            if components:
+                                result += "\n\nComponents:"
+                                for comp_name, comp_status in components.items():
+                                    comp_emoji = '✅' if comp_status == 'healthy' else '❌'
+                                    result += f"\n  {comp_emoji} {comp_name}: {comp_status}"
+                            
+                            return result
                         else:
-                            return f"⚠️ API responded but with status {response.status_code}\n\nEndpoint: {API_BASE}\n\nTry checking backend logs."
-                    except httpx.ConnectError:
-                        return f"❌ Cannot connect to API\n\nEndpoint: {API_BASE}\n\nThe backend may be down or the URL is incorrect."
-                    except httpx.TimeoutException:
-                        return f"❌ Connection timeout\n\nEndpoint: {API_BASE}\n\nThe backend is not responding."
-                    except Exception as e:
-                        return f"❌ Error: {type(e).__name__}\n\n{str(e)}\n\nEndpoint: {API_BASE}"
+                            return f"⚠️ API responded but with status {response.status_code}\n\nEndpoint: {API_BASE}\n\nTry checking backend 
                 
                 # Wire up event handlers
                 create_folder_btn.click(
@@ -331,7 +415,7 @@ def create_ui():
                 upload_to_folder_btn.click(
                     upload_to_folder,
                     inputs=[folder_selector, file_upload_multi],
-                    outputs=[upload_folder_status]
+                    outputs=[upload_folder_status, upload_text_preview]
                 ).then(
                     list_folder_documents,
                     inputs=[folder_selector],
