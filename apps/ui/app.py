@@ -87,11 +87,12 @@ def create_ui():
                     with gr.Column():
                         index_folder_btn = gr.Button("🔄 Index Selected Folder", variant="primary")
                         check_status_btn = gr.Button("📊 Check Folder Status", variant="secondary")
+                        test_api_btn = gr.Button("🔍 Test API Connection", variant="secondary")
                     with gr.Column():
                         indexing_status = gr.Textbox(
                             label="Indexing Status",
                             interactive=False,
-                            lines=4,
+                            lines=6,
                             placeholder="Select a folder and click 'Index Selected Folder' to start indexing"
                         )
                 
@@ -222,10 +223,18 @@ def create_ui():
                             result = response.json()
                             return f"✅ Indexing started!\nJob ID: {result.get('job_id', 'N/A')}\nStatus: Processing...\n\nThis may take several minutes. Click 'Refresh Folder List' to check progress."
                         else:
-                            error_data = response.json() if response.headers.get('content-type') == 'application/json' else {"detail": response.text}
-                            return f"❌ Failed: {error_data.get('detail', 'Unknown error')}"
+                            try:
+                                error_data = response.json()
+                                error_msg = error_data.get('detail', error_data.get('message', 'Unknown error'))
+                            except:
+                                error_msg = response.text
+                            return f"❌ Indexing Failed (HTTP {response.status_code})\n\nError: {error_msg}\n\nAPI: {API_BASE}"
+                    except httpx.TimeoutException:
+                        return f"❌ Request timed out\n\nThe API took too long to respond. Check if the backend is running at: {API_BASE}"
+                    except httpx.ConnectError:
+                        return f"❌ Connection failed\n\nCannot connect to API at: {API_BASE}\n\nMake sure the backend is running."
                     except Exception as e:
-                        return f"❌ Error: {str(e)}"
+                        return f"❌ Unexpected Error\n\n{type(e).__name__}: {str(e)}\n\nAPI: {API_BASE}"
                 
                 def check_folder_status(folder_id):
                     """Check the current status of a folder's indexing."""
@@ -240,6 +249,7 @@ def create_ui():
                             status = result.get('status', 'unknown')
                             folder_name = result.get('name', 'Unknown')
                             doc_count = result.get('document_count', 0)
+                            error_msg = result.get('error_message', '')
                             
                             status_emoji = {
                                 'ready': '✅',
@@ -248,11 +258,34 @@ def create_ui():
                                 'not_indexed': '⚠️'
                             }.get(status, '❓')
                             
-                            return f"{status_emoji} Folder: {folder_name}\nStatus: {status}\nDocuments: {doc_count}"
+                            status_text = f"{status_emoji} Folder: {folder_name}\nStatus: {status}\nDocuments: {doc_count}"
+                            
+                            # If failed, show error details
+                            if status == 'failed' and error_msg:
+                                status_text += f"\n\n⚠️ Error Details:\n{error_msg}"
+                            
+                            return status_text
                         else:
-                            return f"❌ Failed to check status"
+                            return f"❌ Failed to check status (HTTP {response.status_code})"
                     except Exception as e:
                         return f"❌ Error: {str(e)}"
+                
+                def test_api_connection():
+                    """Test connection to the backend API."""
+                    try:
+                        # Test basic health endpoint
+                        response = httpx.get(f"{API_BASE}/health", timeout=5.0)
+                        if response.status_code == 200:
+                            result = response.json()
+                            return f"✅ API Connected!\n\nEndpoint: {API_BASE}\nStatus: {result.get('status', 'OK')}\nVersion: {result.get('version', 'N/A')}"
+                        else:
+                            return f"⚠️ API responded but with status {response.status_code}\n\nEndpoint: {API_BASE}"
+                    except httpx.ConnectError:
+                        return f"❌ Cannot connect to API\n\nEndpoint: {API_BASE}\n\nThe backend may be down or the URL is incorrect."
+                    except httpx.TimeoutException:
+                        return f"❌ Connection timeout\n\nEndpoint: {API_BASE}\n\nThe backend is not responding."
+                    except Exception as e:
+                        return f"❌ Error: {type(e).__name__}\n\n{str(e)}\n\nEndpoint: {API_BASE}"
                 
                 # Wire up event handlers
                 create_folder_btn.click(
@@ -316,6 +349,11 @@ def create_ui():
                 ).then(
                     list_folders,
                     outputs=[folder_list]
+                )
+                
+                test_api_btn.click(
+                    test_api_connection,
+                    outputs=[indexing_status]
                 )
             
             # Tab 2: Document Ingestion (Legacy - kept for backward compatibility)
