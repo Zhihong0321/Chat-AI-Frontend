@@ -273,13 +273,13 @@ def create_ui():
                 def test_api_connection():
                     """Test connection to the backend API."""
                     try:
-                        # Test basic health endpoint
-                        response = httpx.get(f"{API_BASE}/health", timeout=5.0)
+                        # Test folders list endpoint (should always work)
+                        response = httpx.get(f"{API_BASE}/folders/list", timeout=5.0)
                         if response.status_code == 200:
-                            result = response.json()
-                            return f"✅ API Connected!\n\nEndpoint: {API_BASE}\nStatus: {result.get('status', 'OK')}\nVersion: {result.get('version', 'N/A')}"
+                            folders = response.json()
+                            return f"✅ API Connected!\n\nEndpoint: {API_BASE}\nStatus: OK\nFolders found: {len(folders)}"
                         else:
-                            return f"⚠️ API responded but with status {response.status_code}\n\nEndpoint: {API_BASE}"
+                            return f"⚠️ API responded but with status {response.status_code}\n\nEndpoint: {API_BASE}\n\nTry checking backend logs."
                     except httpx.ConnectError:
                         return f"❌ Cannot connect to API\n\nEndpoint: {API_BASE}\n\nThe backend may be down or the URL is incorrect."
                     except httpx.TimeoutException:
