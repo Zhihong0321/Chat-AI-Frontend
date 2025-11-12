@@ -124,6 +124,35 @@ def create_ui():
                         )
                 
                 gr.Markdown("---")
+                gr.Markdown("### File Management")
+                gr.Markdown("Delete individual files or entire folders")
+                
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("**Delete Files from Folder**")
+                        delete_file_selector = gr.Dropdown(
+                            label="Select File to Delete",
+                            choices=[],
+                            info="Choose a file from the selected folder"
+                        )
+                        with gr.Row():
+                            refresh_files_btn = gr.Button("🔄 Refresh Files", variant="secondary")
+                            delete_file_btn = gr.Button("🗑️ Delete File", variant="stop")
+                        file_delete_status = gr.Textbox(label="File Delete Status", interactive=False, lines=2)
+                    
+                    with gr.Column():
+                        gr.Markdown("**Delete Entire Folder**")
+                        delete_folder_selector = gr.Dropdown(
+                            label="Select Folder to Delete",
+                            choices=[],
+                            info="⚠️ This will delete the folder and ALL its contents"
+                        )
+                        with gr.Row():
+                            refresh_delete_folders_btn = gr.Button("🔄 Refresh Folders", variant="secondary")
+                            delete_folder_btn = gr.Button("🗑️ Delete Folder", variant="stop")
+                        folder_delete_status = gr.Textbox(label="Folder Delete Status", interactive=False, lines=2)
+                
+                gr.Markdown("---")
                 gr.Markdown("### Indexing")
                 gr.Markdown("⚠️ **Important:** Documents must be indexed before they can be queried by agents.")
                 
@@ -397,6 +426,86 @@ def create_ui():
                     except Exception as e:
                         return f"❌ Error: {type(e).__name__}\n\n{str(e)}\n\nEndpoint: {API_BASE}"
                 
+                def get_folder_files_for_deletion(folder_id):
+                    """Get list of files in selected folder for deletion dropdown."""
+                    if not folder_id:
+                        return gr.Dropdown(choices=[])
+                    
+                    try:
+                        response = httpx.get(f"{API_BASE}/folders/{folder_id}/documents", timeout=10.0)
+                        if response.status_code == 200:
+                            docs = response.json()
+                            if not docs:
+                                return gr.Dropdown(choices=[])
+                            # Return list of tuples (display_name, doc_id)
+                            return gr.Dropdown(
+                                choices=[(f"{d['title']} ({d.get('size', 0) / 1024:.1f} KB)", d['doc_id']) for d in docs]
+                            )
+                        else:
+                            return gr.Dropdown(choices=[])
+                    except Exception as e:
+                        return gr.Dropdown(choices=[])
+                
+                def delete_file_from_folder(folder_id, doc_id):
+                    """Delete a specific file from a folder."""
+                    if not folder_id:
+                        return "❌ Please select a folder first"
+                    
+                    if not doc_id:
+                        return "❌ Please select a file to delete"
+                    
+                    try:
+                        response = httpx.delete(
+                            f"{API_BASE}/folders/{folder_id}/documents/{doc_id}",
+                            timeout=10.0
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            return f"✅ File deleted successfully!\n{result.get('message', '')}"
+                        else:
+                            error_data = response.json() if response.headers.get('content-type') == 'application/json' else {"detail": response.text}
+                            return f"❌ Failed to delete file: {error_data.get('detail', 'Unknown error')}"
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                def get_folders_for_deletion():
+                    """Get list of folders for deletion dropdown."""
+                    try:
+                        response = httpx.get(f"{API_BASE}/folders/list", timeout=10.0)
+                        if response.status_code == 200:
+                            folders = response.json()
+                            if not folders:
+                                return gr.Dropdown(choices=[])
+                            # Return list of tuples (display_name, folder_id)
+                            return gr.Dropdown(
+                                choices=[(f"{f['name']} ({f['document_count']} docs)", f['folder_id']) for f in folders]
+                            )
+                        else:
+                            return gr.Dropdown(choices=[])
+                    except Exception as e:
+                        return gr.Dropdown(choices=[])
+                
+                def delete_entire_folder(folder_id):
+                    """Delete an entire folder and all its contents."""
+                    if not folder_id:
+                        return "❌ Please select a folder to delete"
+                    
+                    try:
+                        response = httpx.delete(
+                            f"{API_BASE}/folders/{folder_id}",
+                            timeout=10.0
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            return f"✅ Folder deleted successfully!\n{result.get('message', 'Folder and all its contents have been removed.')}"
+                        else:
+                            error_data = response.json() if response.headers.get('content-type') == 'application/json' else {"detail": response.text}
+                            return f"❌ Failed to delete folder: {error_data.get('detail', 'Unknown error')}"
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
                 # Wire up event handlers
                 create_folder_btn.click(
                     create_folder,
@@ -464,6 +573,57 @@ def create_ui():
                 test_api_btn.click(
                     test_api_connection,
                     outputs=[indexing_status]
+                )
+                
+                # File deletion handlers
+                folder_selector.change(
+                    get_folder_files_for_deletion,
+                    inputs=[folder_selector],
+                    outputs=[delete_file_selector]
+                )
+                
+                refresh_files_btn.click(
+                    get_folder_files_for_deletion,
+                    inputs=[folder_selector],
+                    outputs=[delete_file_selector]
+                )
+                
+                delete_file_btn.click(
+                    delete_file_from_folder,
+                    inputs=[folder_selector, delete_file_selector],
+                    outputs=[file_delete_status]
+                ).then(
+                    list_folder_documents,
+                    inputs=[folder_selector],
+                    outputs=[document_list]
+                ).then(
+                    get_folder_files_for_deletion,
+                    inputs=[folder_selector],
+                    outputs=[delete_file_selector]
+                ).then(
+                    list_folders,
+                    outputs=[folder_list]
+                )
+                
+                # Folder deletion handlers
+                refresh_delete_folders_btn.click(
+                    get_folders_for_deletion,
+                    outputs=[delete_folder_selector]
+                )
+                
+                delete_folder_btn.click(
+                    delete_entire_folder,
+                    inputs=[delete_folder_selector],
+                    outputs=[folder_delete_status]
+                ).then(
+                    list_folders,
+                    outputs=[folder_list]
+                ).then(
+                    get_folder_choices,
+                    outputs=[folder_selector]
+                ).then(
+                    get_folders_for_deletion,
+                    outputs=[delete_folder_selector]
                 )
             
             # Tab 2: Document Ingestion (Legacy - kept for backward compatibility)
