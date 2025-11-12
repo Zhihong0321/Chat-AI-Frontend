@@ -213,28 +213,38 @@ def create_ui():
                         return "❌ Please select a folder first"
                     
                     try:
+                        url = f"{API_BASE}/folders/{folder_id}/index"
+                        print(f"[DEBUG] Calling indexing endpoint: {url}")
+                        
                         response = httpx.post(
-                            f"{API_BASE}/folders/{folder_id}/index",
+                            url,
                             json={"method": "fast"},
-                            timeout=10.0
+                            timeout=30.0  # Increased timeout
                         )
+                        
+                        print(f"[DEBUG] Response status: {response.status_code}")
+                        print(f"[DEBUG] Response body: {response.text[:500]}")
                         
                         if response.status_code == 200:
                             result = response.json()
-                            return f"✅ Indexing started!\nJob ID: {result.get('job_id', 'N/A')}\nStatus: Processing...\n\nThis may take several minutes. Click 'Refresh Folder List' to check progress."
+                            return f"✅ Indexing started!\nJob ID: {result.get('job_id', 'N/A')}\nStatus: {result.get('status', 'Processing')}\nMessage: {result.get('message', 'N/A')}\n\nThis may take several minutes. Click 'Check Folder Status' to monitor progress."
+                        elif response.status_code == 202:
+                            # Accepted - job queued
+                            result = response.json()
+                            return f"✅ Indexing job queued!\nJob ID: {result.get('job_id', 'N/A')}\nStatus: {result.get('status', 'Queued')}\n\nClick 'Check Folder Status' to monitor progress."
                         else:
                             try:
                                 error_data = response.json()
-                                error_msg = error_data.get('detail', error_data.get('message', 'Unknown error'))
+                                error_msg = error_data.get('detail', error_data.get('message', error_data.get('error', 'Unknown error')))
                             except:
-                                error_msg = response.text
-                            return f"❌ Indexing Failed (HTTP {response.status_code})\n\nError: {error_msg}\n\nAPI: {API_BASE}"
+                                error_msg = response.text[:500]
+                            return f"❌ Indexing Failed (HTTP {response.status_code})\n\nError: {error_msg}\n\nURL: {url}"
                     except httpx.TimeoutException:
-                        return f"❌ Request timed out\n\nThe API took too long to respond. Check if the backend is running at: {API_BASE}"
+                        return f"❌ Request timed out after 30 seconds\n\nThe API took too long to respond.\nURL: {API_BASE}/folders/{folder_id}/index"
                     except httpx.ConnectError:
-                        return f"❌ Connection failed\n\nCannot connect to API at: {API_BASE}\n\nMake sure the backend is running."
+                        return f"❌ Connection failed\n\nCannot connect to API.\nURL: {API_BASE}/folders/{folder_id}/index"
                     except Exception as e:
-                        return f"❌ Unexpected Error\n\n{type(e).__name__}: {str(e)}\n\nAPI: {API_BASE}"
+                        return f"❌ Unexpected Error\n\n{type(e).__name__}: {str(e)}\n\nURL: {API_BASE}/folders/{folder_id}/index"
                 
                 def check_folder_status(folder_id):
                     """Check the current status of a folder's indexing."""
@@ -246,29 +256,39 @@ def create_ui():
                         
                         if response.status_code == 200:
                             result = response.json()
+                            print(f"[DEBUG] Status response: {result}")
+                            
                             status = result.get('status', 'unknown')
                             folder_name = result.get('name', 'Unknown')
                             doc_count = result.get('document_count', 0)
-                            error_msg = result.get('error_message', '')
+                            error_msg = result.get('error_message', result.get('error', ''))
+                            last_indexed = result.get('last_indexed', 'Never')
                             
                             status_emoji = {
                                 'ready': '✅',
                                 'indexing': '⏳',
                                 'failed': '❌',
-                                'not_indexed': '⚠️'
+                                'not_indexed': '⚠️',
+                                'parsed': '📄'
                             }.get(status, '❓')
                             
-                            status_text = f"{status_emoji} Folder: {folder_name}\nStatus: {status}\nDocuments: {doc_count}"
+                            status_text = f"{status_emoji} Folder: {folder_name}\nStatus: {status}\nDocuments: {doc_count}\nLast Indexed: {last_indexed}"
                             
-                            # If failed, show error details
-                            if status == 'failed' and error_msg:
-                                status_text += f"\n\n⚠️ Error Details:\n{error_msg}"
+                            # Show all error information
+                            if status == 'failed':
+                                if error_msg:
+                                    status_text += f"\n\n⚠️ Error Details:\n{error_msg}"
+                                else:
+                                    status_text += f"\n\n⚠️ Indexing failed but no error message was stored.\nCheck backend logs for details."
+                                
+                                # Show raw response for debugging
+                                status_text += f"\n\n[DEBUG] Raw response:\n{str(result)[:300]}"
                             
                             return status_text
                         else:
-                            return f"❌ Failed to check status (HTTP {response.status_code})"
+                            return f"❌ Failed to check status (HTTP {response.status_code})\nResponse: {response.text[:200]}"
                     except Exception as e:
-                        return f"❌ Error: {str(e)}"
+                        return f"❌ Error: {type(e).__name__}\n{str(e)}"
                 
                 def test_api_connection():
                     """Test connection to the backend API."""
