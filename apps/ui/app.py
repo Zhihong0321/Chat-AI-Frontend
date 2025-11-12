@@ -389,7 +389,13 @@ def create_ui():
                             
                             return result
                         else:
-                            return f"⚠️ API responded but with status {response.status_code}\n\nEndpoint: {API_BASE}\n\nTry checking backend 
+                            return f"⚠️ API responded but with status {response.status_code}\n\nEndpoint: {API_BASE}\n\nTry checking backend logs."
+                    except httpx.ConnectError:
+                        return f"❌ Cannot connect to API\n\nEndpoint: {API_BASE}\n\nThe backend may be down or the URL is incorrect."
+                    except httpx.TimeoutException:
+                        return f"❌ Connection timeout\n\nEndpoint: {API_BASE}\n\nThe backend is not responding."
+                    except Exception as e:
+                        return f"❌ Error: {type(e).__name__}\n\n{str(e)}\n\nEndpoint: {API_BASE}"
                 
                 # Wire up event handlers
                 create_folder_btn.click(
