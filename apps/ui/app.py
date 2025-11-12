@@ -81,15 +81,19 @@ def create_ui():
                 
                 gr.Markdown("---")
                 gr.Markdown("### Indexing")
+                gr.Markdown("⚠️ **Important:** Documents must be indexed before they can be queried by agents.")
                 
                 with gr.Row():
-                    index_folder_btn = gr.Button("🔄 Index Selected Folder", variant="primary")
-                    indexing_status = gr.Textbox(
-                        label="Indexing Status",
-                        interactive=False,
-                        lines=2,
-                        placeholder="Select a folder and click 'Index Selected Folder' to start"
-                    )
+                    with gr.Column():
+                        index_folder_btn = gr.Button("🔄 Index Selected Folder", variant="primary")
+                        check_status_btn = gr.Button("📊 Check Folder Status", variant="secondary")
+                    with gr.Column():
+                        indexing_status = gr.Textbox(
+                            label="Indexing Status",
+                            interactive=False,
+                            lines=4,
+                            placeholder="Select a folder and click 'Index Selected Folder' to start indexing"
+                        )
                 
                 # Event handlers for Knowledge Vault tab
                 def create_folder(name):
@@ -177,6 +181,8 @@ def create_ui():
                             fail_count += 1
                     
                     summary = f"Upload complete: {success_count} succeeded, {fail_count} failed\n\n"
+                    if success_count > 0:
+                        summary += "⚠️ NEXT STEP: Scroll down and click 'Index Selected Folder' to make documents queryable!\n\n"
                     return summary + "\n".join(results)
                 
                 def list_folder_documents(folder_id):
@@ -214,10 +220,37 @@ def create_ui():
                         
                         if response.status_code == 200:
                             result = response.json()
-                            return f"✅ Indexing started!\nJob ID: {result.get('job_id', 'N/A')}\nThis may take several minutes..."
+                            return f"✅ Indexing started!\nJob ID: {result.get('job_id', 'N/A')}\nStatus: Processing...\n\nThis may take several minutes. Click 'Refresh Folder List' to check progress."
                         else:
                             error_data = response.json() if response.headers.get('content-type') == 'application/json' else {"detail": response.text}
                             return f"❌ Failed: {error_data.get('detail', 'Unknown error')}"
+                    except Exception as e:
+                        return f"❌ Error: {str(e)}"
+                
+                def check_folder_status(folder_id):
+                    """Check the current status of a folder's indexing."""
+                    if not folder_id:
+                        return "❌ Please select a folder first"
+                    
+                    try:
+                        response = httpx.get(f"{API_BASE}/folders/{folder_id}/status", timeout=10.0)
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            status = result.get('status', 'unknown')
+                            folder_name = result.get('name', 'Unknown')
+                            doc_count = result.get('document_count', 0)
+                            
+                            status_emoji = {
+                                'ready': '✅',
+                                'indexing': '⏳',
+                                'failed': '❌',
+                                'not_indexed': '⚠️'
+                            }.get(status, '❓')
+                            
+                            return f"{status_emoji} Folder: {folder_name}\nStatus: {status}\nDocuments: {doc_count}"
+                        else:
+                            return f"❌ Failed to check status"
                     except Exception as e:
                         return f"❌ Error: {str(e)}"
                 
@@ -269,6 +302,15 @@ def create_ui():
                 
                 index_folder_btn.click(
                     index_folder,
+                    inputs=[folder_selector],
+                    outputs=[indexing_status]
+                ).then(
+                    list_folders,
+                    outputs=[folder_list]
+                )
+                
+                check_status_btn.click(
+                    check_folder_status,
                     inputs=[folder_selector],
                     outputs=[indexing_status]
                 ).then(
