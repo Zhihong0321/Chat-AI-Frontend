@@ -97,6 +97,24 @@ When you click "Index Selected Folder", look for:
 3. Share the error message here so we can diagnose further
 4. Check if the backend repository has proper configuration
 
+## Backend API Documentation
+
+The backend API is available at: `https://eternalgy-rag-ai-production.up.railway.app`
+
+**Available Endpoints:**
+- `/health` - Simple health check (no auth required)
+- `/health/detailed` - Detailed system health (requires X-Admin-Token header)
+- `/docs` - Interactive API documentation (Swagger UI)
+
+**Health Check:**
+```bash
+# Simple health check
+curl https://eternalgy-rag-ai-production.up.railway.app/health
+
+# Detailed health check (requires admin token)
+curl -H "X-Admin-Token: your-token" https://eternalgy-rag-ai-production.up.railway.app/health/detailed
+```
+
 ## Backend Repository
 If you have access to the backend code repository, we should:
 1. Review the `/folders/{folder_id}/index` endpoint implementation
